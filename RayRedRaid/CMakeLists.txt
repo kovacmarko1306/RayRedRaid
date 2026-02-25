@@ -17,10 +17,12 @@ endif()
 
 add_executable(RayRedRaid ${SOURCES})
 
-# Optional: raygui (header-only, in ../external/raygui/src/)
-set(RAYGUI_DIR "${CMAKE_SOURCE_DIR}/../../external/raygui/src")
-if(EXISTS "${RAYGUI_DIR}")
+# raygui (header-only, in ../../external/raygui/src/ relative to top-level)
+get_filename_component(RAYGUI_DIR "${CMAKE_SOURCE_DIR}/../external/raygui/src" ABSOLUTE)
+if(EXISTS "${RAYGUI_DIR}/raygui.h")
     target_include_directories(RayRedRaid PRIVATE "${RAYGUI_DIR}")
+else()
+    message(FATAL_ERROR "raygui.h not found at: ${RAYGUI_DIR}")
 endif()
 
 # Platform-specific linking
@@ -39,6 +41,7 @@ if(WIN32)
 
     target_compile_options(RayRedRaid PRIVATE
         /D_CRT_SECURE_NO_WARNINGS
+        /Zc:strictStrings-
     )
 
     target_link_options(RayRedRaid PRIVATE

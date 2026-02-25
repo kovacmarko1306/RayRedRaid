@@ -1,8 +1,8 @@
-﻿#define RAYGUI_IMPLEMENTATION
+#define RAYGUI_IMPLEMENTATION
 
 #include "raylib.h"
 #include "raymath.h"
-//#include "raygui.h"
+#include "raygui.h"
 #include "redball_icon.h"
 
 #include "sounds/shoot_embed.h"
@@ -63,12 +63,12 @@ int main()
 
     InitAudioDevice();
 
-    // Kako generirati header iz PNG-a (samo jednom generirati pa zakomentirati) :  
+    // Kako generirati header iz PNG-a (samo jednom generirati pa zakomentirati) :
     // Image img = LoadImage("redball.png");
     // ExportImageAsCode(img, "redball_icon.h");  // generira header
     // UnloadImage(img);
 
-	// kada se ima redball_icon.h onda ju ovako prikazati kao ikonu prozora: 
+	// kada se ima redball_icon.h onda ju ovako prikazati kao ikonu prozora:
     Image icon = { 0 };  // ili Image icon = {0};
     icon.data = REDBALL_ICON_DATA;                     // pointer na tvoj niz
     icon.width = REDBALL_ICON_WIDTH;                    // 32
@@ -100,7 +100,7 @@ int main()
     Wave mptWave = LoadWaveFromMemory(".mp3", thompson_hipodrom_horn_plus_mp3, (int)thompson_hipodrom_horn_plus_mp3_len);
     Sound mptSound = LoadSoundFromWave(mptWave);
 
-  
+
     SetSoundVolume(shootSound, 0.2f);
     SetSoundVolume(explosionSound, 0.7f);
     SetSoundVolume(mptSound, 0.7f);
@@ -112,7 +112,7 @@ int main()
     Vector2 player = { 150, screenHeight / 2.0f };
     float playerSpeed = 600.0f;
 
-  
+
 
     // GAME STATE
     std::vector<Bullet> bullets;
@@ -122,12 +122,21 @@ int main()
     float bulletSpeed = 1200.0f;
     int bulletsFired = 0;
     int score = 0;
-    int nukeCount = 3;          
+    int nukeCount = 3;
     bool nukeUsedThisFrame = false;
 
     float gameTime = 0.0f;
     const float GAME_DURATION = 30.0f;
     bool gameOver = false;
+
+    // START SCREEN
+    bool gameStarted = false;
+    char username[64] = { 0 };
+    bool usernameEditMode = true;  // odmah aktivan za tipkanje
+
+    // CHAT
+    char chatMessage[256] = { 0 };
+    bool chatEditMode = false;
 
     // Spawn initial targets
     for (int i = 0; i < 5; i++)
@@ -148,7 +157,7 @@ int main()
         // UPDATE LOGIC
         // ──────────────────────────────────────────────────────────────
 
-        if (!gameOver)
+        if (!gameOver && gameStarted)
         {
             gameTime += dt;
 
@@ -279,7 +288,7 @@ int main()
                 e.life -= dt;
             }
 
-		
+
 
         }
 
@@ -312,51 +321,118 @@ int main()
             }
         }
 
-        if (!gameOver)
+        if (!gameStarted)
         {
-            // Player
-            DrawCircleV(player, 25, BLUE);
+            // ── START SCREEN ─────────────────────────────────────────
+            int cx = screenWidth / 2;
+            int cy = screenHeight / 2;
 
-            // Bullets
-            for (const auto& b : bullets)
-                DrawCircleV(b.pos, 6, ORANGE);
+            // Semi-transparent overlay
+            int ow = 800, oh = 460;
+            int ox = cx - ow / 2;
+            int oy = cy - oh / 2 - 10;
+            DrawRectangle(ox, oy, ow, oh, Color{ 0, 0, 0, 190 });
+            DrawRectangleLinesEx({ (float)ox, (float)oy, (float)ow, (float)oh }, 2, Fade(RED, 0.7f));
 
-            // Targets
-            for (const auto& t : targets)
-                if (t.alive)
-                    DrawCircleV(t.pos, t.radius, RED);
+            // Title
+            const char* title = "RAY RED RAID";
+            int titleSize = 68;
+            DrawText(title, cx - MeasureText(title, titleSize) / 2, oy + 30, titleSize, RED);
 
-            // Explosions
-            for (const auto& e : explosions)
-                DrawCircleLinesV(e.pos, e.radius, ORANGE);
+            // Subtitle
+            const char* sub = "Enter your username to start:";
+            DrawText(sub, cx - MeasureText(sub, 26) / 2, oy + 116, 26, LIGHTGRAY);
+
+            // "Username:" label — centered, above textbox
+            DrawText("Username:", cx - MeasureText("Username:", 26) / 2, oy + 168, 26, WHITE);
+
+            // TextBox — centered below label
+            GuiSetStyle(DEFAULT, TEXT_SIZE, 24);
+            if (GuiTextBox({ (float)(cx - 200), (float)(oy + 204), 400, 52 }, username, 64, usernameEditMode))
+                usernameEditMode = !usernameEditMode;
+
+            // START GAME button — centered
+            if (GuiButton({ (float)(cx - 130), (float)(oy + 278), 260, 56 }, "START GAME"))
+                if (strlen(username) > 0) gameStarted = true;
+
+            GuiSetStyle(DEFAULT, TEXT_SIZE, 10);
+
+            // Hint
+            const char* hint = "Click the textbox, type your name, then click START GAME";
+            DrawText(hint, cx - MeasureText(hint, 18) / 2, oy + 360, 18, GRAY);
+        }
+        else
+        {
+            if (!gameOver)
+            {
+                // Player
+                DrawCircleV(player, 25, BLUE);
+
+                // Bullets
+                for (const auto& b : bullets)
+                    DrawCircleV(b.pos, 6, ORANGE);
+
+                // Targets
+                for (const auto& t : targets)
+                    if (t.alive)
+                        DrawCircleV(t.pos, t.radius, RED);
+
+                // Explosions
+                for (const auto& e : explosions)
+                    DrawCircleLinesV(e.pos, e.radius, ORANGE);
+            }
+
+            // UI - tijekom igre
+            DrawText(TextFormat("Score: %d", score), 20, 20, 28, DARKGREEN);
+            DrawText(TextFormat("Time: %.1f", GAME_DURATION - gameTime), 20, 60, 28, DARKGREEN);
+            DrawText(TextFormat("Bullets: %d", bulletsFired), 20, 100, 28, DARKGREEN);
+            DrawText(TextFormat("Nukes: %d (N)", nukeCount), 20, 140, 28, nukeCount > 0 ? DARKGREEN : GRAY);
+            DrawText(TextFormat("Player: %s", username), 20, 180, 24, YELLOW);
+
+            if (gameOver)
+            {
+                //DrawRectangle(0, 0, screenWidth, screenHeight, Color { 0, 0, 0, 180 });
+
+                const char* msg = TextFormat("GAME OVER - YOU WIN !!! \n\n%s - Score: %d\n\nPress Enter to play again", username, score);
+                int fontSize = 32;
+                Vector2 size = MeasureTextEx(GetFontDefault(), msg, fontSize, 4);
+
+                DrawText(msg,
+                    (screenWidth - size.x) / 2,
+                    (screenHeight - size.y) / 4,
+                    fontSize, BLUE);
+            }
+
+            // ── CHAT OVERLAY (bottom) ────────────────────────────────
+            {
+                int chatH = 62;
+                int chatY = screenHeight - chatH;
+
+                DrawRectangle(0, chatY, screenWidth, chatH, Color{ 0, 0, 0, 175 });
+                DrawLine(0, chatY, screenWidth, chatY, Fade(DARKGRAY, 0.9f));
+
+                GuiSetStyle(DEFAULT, TEXT_SIZE, 22);
+
+                DrawText("Chat:", 14, chatY + (chatH - 22) / 2, 22, LIGHTGRAY);
+
+                int tbX = 84;
+                int tbW = screenWidth - 244;
+                if (GuiTextBox({ (float)tbX, (float)(chatY + 10), (float)tbW, 42 }, chatMessage, 256, chatEditMode))
+                    chatEditMode = !chatEditMode;
+
+                if (GuiButton({ (float)(screenWidth - 155), (float)(chatY + 10), 140, 42 }, "SEND"))
+                { /* TODO: send logic */ }
+
+                GuiSetStyle(DEFAULT, TEXT_SIZE, 10);
+            }
         }
 
-        // UI - tijekom igre
-        DrawText(TextFormat("Score: %d", score), 20, 20, 28, DARKGREEN);
-        DrawText(TextFormat("Time: %.1f", GAME_DURATION - gameTime), 20, 60, 28, DARKGREEN);
-        DrawText(TextFormat("Bullets: %d", bulletsFired), 20, 100, 28, DARKGREEN);
-        DrawText(TextFormat("Nukes: %d (N)", nukeCount), 20, 140, 28,nukeCount > 0 ? DARKGREEN : GRAY);
-
-        if (gameOver)
-        {
-            //DrawRectangle(0, 0, screenWidth, screenHeight, Color { 0, 0, 0, 180 });
-
-            const char* msg = TextFormat("GAME OVER - YOU WIN !!! \n\nYour score: %d\n\nPress Enter to play again", score);
-            int fontSize = 32;
-            Vector2 size = MeasureTextEx(GetFontDefault(), msg, fontSize, 4);
-
-            DrawText(msg,
-                (screenWidth - size.x) / 2,
-                (screenHeight - size.y) / 4,
-                fontSize, BLUE);
-        }
-
-        DrawFPS(10, screenHeight - 30);
+        DrawFPS(screenWidth - 90, 10);
 
         EndDrawing();
 
         // ── RESTART ON CLICK ───────────────────────────────────────
-        if (gameOver && (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || IsKeyPressed(KEY_ENTER)))
+        if (gameOver && gameStarted && (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || IsKeyPressed(KEY_ENTER)))
         {
 
             //PlaySound(hornSound);
@@ -366,8 +442,8 @@ int main()
             gameOver = false;
             score = 0;
             bulletsFired = 0;
-            nukeCount = 3;          
-            nukeUsedThisFrame = false;  
+            nukeCount = 3;
+            nukeUsedThisFrame = false;
 
             bullets.clear();
             explosions.clear();
@@ -384,7 +460,7 @@ int main()
                     });
             }
 
-            
+
         }
     }
     UnloadTexture(backgroundTexture);
@@ -393,10 +469,9 @@ int main()
     UnloadSound(hornSound);
 	UnloadSound(mptSound);
     UnloadWave(hornWave);
-    UnloadWave(shootWave);       
+    UnloadWave(shootWave);
     UnloadWave(explosionWave);
 	UnloadWave(mptWave);
     CloseWindow();
     return 0;
 }
- 
