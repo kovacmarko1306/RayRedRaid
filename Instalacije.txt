@@ -1,0 +1,54 @@
+
+
+
+
+u external parent folderu izvršiti :
+git clone https://github.com/raysan5/raylib.git
+git clone https://github.com/raysan5/raygui.git
+git clone https://github.com/openssl/openssl.git
+
+
+
+moraš instalirati posebno statičku varijantu za build u jedan exe
+
+cd C:\dev\vcpkg
+
+.\vcpkg install raylib:x64-windows-static
+
+
+
+koristi BUILD.bat
+
+ili ručni redoslijed naredbi:
+
+cd C:\Users\kkovac\source\repos\2026\KK\RayRedRaid
+rmdir /s /q build
+mkdir build
+cd build
+
+cmake .. -A x64 -DCMAKE_TOOLCHAIN_FILE=C:/dev/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows-static
+
+cmake --build . --config Release
+
+
+
+zvukovi , u git bash ...
+
+KKovac@K-KO-L2 MINGW64 ~
+$ cd /c/Users/kkovac/source/repos/2026/KK/RayRedRaid/RayRedRaid/sounds
+
+KKovac@K-KO-L2 MINGW64 ~/source/repos/2026/KK/RayRedRaid/RayRedRaid/sounds
+$ dir
+explosion.wav  gameover.wav  scream.aiff  shoot.wav
+
+KKovac@K-KO-L2 MINGW64 ~/source/repos/2026/KK/RayRedRaid/RayRedRaid/sounds
+$ xxd -i shoot.wav > shoot_embed.h
+
+KKovac@K-KO-L2 MINGW64 ~/source/repos/2026/KK/RayRedRaid/RayRedRaid/sounds
+$ xxd -i horn.mp3 > horn_embed.h
+
+KKovac@K-KO-L2 MINGW64 ~/source/repos/2026/KK/RayRedRaid/RayRedRaid/sounds
+$ xxd -i horn.mp3 > horn_embed.h
+
+$ xxd -i horn.mp3 > horn_embed.h
+
