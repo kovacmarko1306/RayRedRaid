@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Ray Red Raid
+Comment=RayRedRaid game
+Exec=@CMAKE_INSTALL_PREFIX@/bin/RayRedRaid
+Icon=redball
+Terminal=false
+Type=Application
+Categories=Game;Arcade;

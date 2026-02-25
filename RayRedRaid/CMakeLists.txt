@@ -63,3 +63,19 @@ else()
         -Wextra
     )
 endif()
+
+# Install helpers for Linux desktops (do not affect Windows builds)
+if(UNIX)
+    # Install executable to standard bin dir
+    install(TARGETS RayRedRaid RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+    # Install icon (we ship redball.ico in source tree)
+        install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/redball.ico
+            DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/64x64/apps)
+
+    # Configure .desktop file and install
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/rayredraid.desktop.in
+                   ${CMAKE_CURRENT_BINARY_DIR}/rayredraid.desktop @ONLY)
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/rayredraid.desktop
+            DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications)
+endif()

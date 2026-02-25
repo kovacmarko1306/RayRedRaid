@@ -31,6 +31,27 @@ chmod +x BUILD.sh SETUP_LINUX.sh    # Make executable (one-time)
 ./BUILD.sh                           # Release build
 ```
 
+### Icons on Linux
+
+The Windows build embeds `redball.ico` via `redball.rc`. On Linux:
+
+- The game sets the window icon from `redball_icon.h` at runtime (so the running window shows the icon).
+- The ELF executable does not contain the Windows `.ico`; if you want an icon file next to the binary (for file managers or packaging), copy it into the build folder or convert it:
+
+```bash
+cp RayRedRaid/redball.ico build/RayRedRaid/
+# or convert to PNG (ImageMagick)
+convert RayRedRaid/redball.ico -resize 64x64 build/RayRedRaid/redball-64.png
+```
+
+- To install a proper desktop launcher and place icons in the correct places, run:
+
+```bash
+cd build
+cmake --install . --prefix $HOME/.local
+# This installs the binary, icon and .desktop to your user profile
+```
+
 Or manual:
 ```bash
 chmod +x BUILD.sh

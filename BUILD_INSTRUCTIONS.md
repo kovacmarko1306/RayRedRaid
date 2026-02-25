@@ -101,6 +101,29 @@ cd ..
 ./build/RayRedRaid/RayRedRaid
 ```
 
+### Icons on Linux
+
+Note: Windows embeds icons via `redball.rc` into the .exe. Linux/ELF does not embed Windows .ico files the same way.
+
+- The window icon at runtime is set from `redball_icon.h` (so the game window shows the icon when running).
+- If you want an icon file next to the built executable (for packaging or file managers), copy the icon into the build output directory or convert it to PNG:
+
+```bash
+# Copy ICO next to binary
+cp RayRedRaid/redball.ico build/RayRedRaid/
+
+# Or convert to PNG (ImageMagick) and place a 64×64 icon
+convert RayRedRaid/redball.ico -resize 64x64 build/RayRedRaid/redball-64.png
+```
+
+- To install a desktop launcher and proper icon into your user profile, use CMake install (this project supports a UNIX install):
+
+```bash
+cd build
+cmake --install . --prefix $HOME/.local
+# Installed to: ~/.local/bin/RayRedRaid, ~/.local/share/icons, ~/.local/share/applications/
+```
+
 ---
 
 ## 📋 CMake Configuration
