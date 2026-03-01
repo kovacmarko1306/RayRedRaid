@@ -59,7 +59,7 @@ int main()
         stars[i].color = Fade(WHITE, GetRandomValue(128, 255) / 255.0f);  // poluprozirne bijele
     }
 
-    InitWindow(screenWidth, screenHeight, "Ray Red Raid - Shoot right !!!");
+    InitWindow(screenWidth, screenHeight, "Ray Red Raid - Shoot'em all !");
 
     InitAudioDevice();
 

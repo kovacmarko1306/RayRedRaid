@@ -2,7 +2,9 @@
 
 git fetch --all
 
-git add . ; git commit -m ".sql update" ; git pull --rebase origin main ; git push origin main
+git add . ; git commit -m "readme" ; git pull --rebase origin main ; git push origin main
+
+git diff RayRedRaid.cpp
 
 
 u external parent folderu izvršiti :
