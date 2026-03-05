@@ -1,12 +1,20 @@
 
 todo
 ====
+real time chat
+sspremi username lokalno na racunalo i kod pokretanja programa učitaj username 
 
 readame je pretrpan
 redis - realtime chat i top lista igrača
 webapiclient ugraditi - nije da baš treba nego čisto demonstarcije radi (voditi log igranja , user + scor + dt)
 
+run
+===
+build/RayRedRaid/RayRedRaid
 
+build
+=====
+ ./BUILD.sh
 
 git help
 ========
@@ -17,9 +25,10 @@ git diff RayRedRaid.cpp # usporedba
 
 git pull  # git pull — on interno radi fetch + merge u jednom koraku. 
 
-git add . ; git commit -m "readme" ; git pull --rebase origin main ; git push origin main
+git add . ; git commit -m "redis" ; git pull --rebase origin main ; git push origin main
 
- 
+ git config --global user.name "kovacmarko1306"
+git config --global user.email "kovacmarko1306@gmail.com"
 
 external dependency
 ===================

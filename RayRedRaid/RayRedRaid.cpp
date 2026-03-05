@@ -1,5 +1,6 @@
 #define RAYGUI_IMPLEMENTATION
 
+#include <sw/redis++/redis++.h>
 #include "raylib.h"
 #include "raymath.h"
 #include "raygui.h"
@@ -14,6 +15,79 @@
 #include <vector>
 #include <algorithm>
 #include <string>
+#include <utility>
+#include <thread>
+#include <iostream>
+
+using namespace std;
+
+// Redis leaderboard utilities ------------------------------------------------
+
+// add/update a player's score in the sorted set
+static void update_leaderboard(sw::redis::Redis &redis, const string &username, int score)
+{
+    try {
+        // ZADD defaults to update score if member exists
+        redis.zadd("leaderboard", username, score);
+    }
+    catch (const sw::redis::Error &e) {
+        cerr << "Redis error (update leaderboard): " << e.what() << endl;
+    }
+}
+
+// fetch top N players (name, score) from sorted set
+static vector<pair<string,int>> get_top_players(sw::redis::Redis &redis, int n)
+{
+    vector<pair<string,int>> out;
+    try {
+        vector<string> names;
+        redis.zrevrange("leaderboard", 0, n - 1, back_inserter(names));
+        for (auto &name : names) {
+            auto score_opt = redis.zscore("leaderboard", name);
+            if (score_opt) {
+                out.emplace_back(name, (int)*score_opt);
+            } else {
+                out.emplace_back(name, 0);
+            }
+        }
+    }
+    catch (const sw::redis::Error &e) {
+        cerr << "Redis error (get top players): " << e.what() << endl;
+    }
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+
+void listen_to_redis(string host, int port, string password) {
+	try {
+		sw::redis::ConnectionOptions opts;
+		opts.host = host;
+		opts.port = port;
+		opts.password = password;
+
+		auto redis_sub = sw::redis::Redis(opts);
+		auto sub = redis_sub.subscriber();
+
+		// Što napraviti kad stigne signal/poruka
+		sub.on_message([](string channel, string msg) {
+			//cout << "\n[REDIS SIGNAL]  channel " << channel << ": " << msg << endl;
+			cout << "\n" << msg << " [" << "]"  << endl;
+			cout << "Nastavite s radom (izbor): \n" << flush;
+			});
+
+		sub.subscribe("ps_osvjezavanje"); // Slušamo kanal za signale
+
+		cout << "[REDIS] listening on chanell 'ps_osvjezavanje'..." << endl;
+
+		while (true) {
+			sub.consume(); // Čeka poruku bez blokiranja glavnog threada
+		}
+	}
+	catch (const sw::redis::Error& e) {
+		cerr << "Subscriber greška: " << e.what() << endl;
+	}
+}
 
 struct Bullet
 {
@@ -46,10 +120,24 @@ Star stars[20];
 
 int main()
 {
+    	sw::redis::ConnectionOptions opts;
+	opts.host = "redis-17353.c16.us-east-1-3.ec2.cloud.redislabs.com";
+	opts.port = 17353;
+	opts.user = "default";
+	opts.password = "5vKxk0eOcekOOWz5Q58S0BVMOGutHo3j";
+	opts.connect_timeout = std::chrono::milliseconds(5000);
+	
+	// Kreiramo Redis objekt
+	auto redis = sw::redis::Redis(opts);
+
+	// Pokrećemo nit za slušanje Redis signala
+	thread t1(listen_to_redis, opts.host, opts.port, opts.password);
+	t1.detach(); // Odvajamo nit da radi neovisno o main-u
+
 	// ikona od exe priprema png za  redball.rc  https://www.icoconverter.com/ + dodati redball.ico u cmakelist
 
-    const int screenWidth = 1800;
-    const int screenHeight = 900;
+    const int screenWidth = 1600;
+    const int screenHeight = 1000;
 
     for (int i = 0; i < 20; i++)
     {
@@ -59,7 +147,7 @@ int main()
         stars[i].color = Fade(WHITE, GetRandomValue(128, 255) / 255.0f);  // poluprozirne bijele
     }
 
-    InitWindow(screenWidth, screenHeight, "Ray Red Raid - Shoot'em all !");
+    InitWindow(screenWidth, screenHeight, "Ray Red Raid - Shoot'em all 2!");
 
     InitAudioDevice();
 
@@ -129,6 +217,9 @@ int main()
     const float GAME_DURATION = 30.0f;
     bool gameOver = false;
 
+    bool scoreSubmitted = false;          // ensure we only push one score per round
+    vector<pair<string,int>> topPlayers;  // cache of top players for start screen
+
     // START SCREEN
     bool gameStarted = false;
     char username[64] = { 0 };
@@ -164,6 +255,11 @@ int main()
             if (gameTime >= GAME_DURATION)
             {
                 gameOver = true;
+                if (!scoreSubmitted && strlen(username) > 0)
+                {
+                    update_leaderboard(redis, string(username), score);
+                    scoreSubmitted = true;
+                }
             }
 
             // ── PLAYER MOVEMENT ────────────────────────────────────────
@@ -327,8 +423,11 @@ int main()
             int cx = screenWidth / 2;
             int cy = screenHeight / 2;
 
+            // refresh leaderboard list (top 3)
+            topPlayers = get_top_players(redis, 3);
+
             // Semi-transparent overlay
-            int ow = 800, oh = 460;
+            int ow = 800, oh = 520;  // a little taller to fit leaderboard
             int ox = cx - ow / 2;
             int oy = cy - oh / 2 - 10;
             DrawRectangle(ox, oy, ow, oh, Color{ 0, 0, 0, 190 });
@@ -338,6 +437,22 @@ int main()
             const char* title = "RAY RED RAID";
             int titleSize = 68;
             DrawText(title, cx - MeasureText(title, titleSize) / 2, oy + 30, titleSize, RED);
+
+            // draw leaderboard under title
+            if (!topPlayers.empty())
+            {
+                const char* lbTitle = "Top Players:";
+                int lbSize = 24;
+                DrawText(lbTitle, cx - MeasureText(lbTitle, lbSize) / 2, oy + 110, lbSize, YELLOW);
+                for (size_t i = 0; i < topPlayers.size(); ++i)
+                {
+                    string line = TextFormat("%zu. %s - %d", i + 1,
+                                             topPlayers[i].first.c_str(),
+                                             topPlayers[i].second);
+                    DrawText(line.c_str(), cx - MeasureText(line.c_str(), 20) / 2,
+                             oy + 140 + (int)i * 28, 20, LIGHTGRAY);
+                }
+            }
 
             // Subtitle
             const char* sub = "Enter your username to start:";
@@ -444,6 +559,7 @@ int main()
             bulletsFired = 0;
             nukeCount = 3;
             nukeUsedThisFrame = false;
+            scoreSubmitted = false;
 
             bullets.clear();
             explosions.clear();

@@ -53,6 +53,8 @@ if(WIN32)
 else()
     target_link_libraries(RayRedRaid PRIVATE
         raylib
+        redis++_static
+        hiredis
         GL
         m
         pthread

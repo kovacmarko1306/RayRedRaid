@@ -35,5 +35,10 @@ set(BUILD_GAMES    OFF CACHE BOOL "" FORCE)
 set(USE_MSVC_RUNTIME_LIBRARY_DLL OFF CACHE BOOL "" FORCE)
 add_subdirectory("${EXTERNAL_DIR}/raylib" "${CMAKE_BINARY_DIR}/raylib")
 
+# redis-plus-plus
+set(REDIS_PLUS_PLUS_BUILD_TEST OFF CACHE BOOL "" FORCE)
+set(REDIS_PLUS_PLUS_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+add_subdirectory("${EXTERNAL_DIR}/redis-plus-plus" "${CMAKE_BINARY_DIR}/redis-plus-plus")
+
 # Include sub-projects.
 add_subdirectory ("RayRedRaid")
