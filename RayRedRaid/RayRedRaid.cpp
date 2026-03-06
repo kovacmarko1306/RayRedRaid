@@ -18,6 +18,9 @@
 #include <utility>
 #include <thread>
 #include <iostream>
+#include <fstream>
+#include <mutex>
+#include <functional>
 
 using namespace std;
 
@@ -59,7 +62,7 @@ static vector<pair<string,int>> get_top_players(sw::redis::Redis &redis, int n)
 
 // ---------------------------------------------------------------------------
 
-void listen_to_redis(string host, int port, string password) {
+void listen_to_redis(string host, int port, string password, vector<string>& chatMessages, mutex& chatMutex, const char* username) {
 	try {
 		sw::redis::ConnectionOptions opts;
 		opts.host = host;
@@ -70,18 +73,25 @@ void listen_to_redis(string host, int port, string password) {
 		auto sub = redis_sub.subscriber();
 
 		// Što napraviti kad stigne signal/poruka
-		sub.on_message([](string channel, string msg) {
-			//cout << "\n[REDIS SIGNAL]  channel " << channel << ": " << msg << endl;
-			cout << "\n" << msg << " [" << "]"  << endl;
-			cout << "Nastavite s radom (izbor): \n" << flush;
+		sub.on_message([&](string channel, string msg) {
+			if (channel == "chat") {
+				cout << "[REDIS CHAT] " << msg << endl;
+				lock_guard<mutex> lock(chatMutex);
+				chatMessages.push_back(msg);
+				if (chatMessages.size() > 50) chatMessages.erase(chatMessages.begin());
+			} else if (channel == "ps_osvjezavanje") {
+				cout << "\n" << msg << " [" << "]" << endl;
+				cout << "Nastavite s radom (izbor): \n" << flush;
+			}
 			});
 
-		sub.subscribe("ps_osvjezavanje"); // Slušamo kanal za signale
+		sub.subscribe("ps_osvjezavanje");
+		sub.subscribe("chat");
 
-		cout << "[REDIS] listening on chanell 'ps_osvjezavanje'..." << endl;
+		cout << "[REDIS] listening on channels 'ps_osvjezavanje' and 'chat'..." << endl;
 
 		while (true) {
-			sub.consume(); // Čeka poruku bez blokiranja glavnog threada
+			sub.consume();
 		}
 	}
 	catch (const sw::redis::Error& e) {
@@ -120,19 +130,37 @@ Star stars[20];
 
 int main()
 {
-    	sw::redis::ConnectionOptions opts;
+	// Redis - delayed initialization
+	sw::redis::Redis* redis = nullptr;
+	std::thread* redisThread = nullptr;
+	bool redisInitialized = false;
+
+	std::mutex chatMutex;
+	vector<string> chatMessages;
+	char username[64] = { 0 };
+
+	// Load username from file
+	std::ifstream infile("username.txt");
+	if (infile.is_open()) {
+		std::string line;
+		if (std::getline(infile, line)) {
+			strcpy(username, line.c_str());
+		}
+		infile.close();
+	}
+
+	// Initialize Redis immediately
+	sw::redis::ConnectionOptions opts;
 	opts.host = "redis-17353.c16.us-east-1-3.ec2.cloud.redislabs.com";
 	opts.port = 17353;
 	opts.user = "default";
 	opts.password = "5vKxk0eOcekOOWz5Q58S0BVMOGutHo3j";
 	opts.connect_timeout = std::chrono::milliseconds(5000);
-	
-	// Kreiramo Redis objekt
-	auto redis = sw::redis::Redis(opts);
-
-	// Pokrećemo nit za slušanje Redis signala
-	thread t1(listen_to_redis, opts.host, opts.port, opts.password);
-	t1.detach(); // Odvajamo nit da radi neovisno o main-u
+	redis = new sw::redis::Redis(opts);
+	redisInitialized = true;
+	// Start Redis listener thread
+	redisThread = new std::thread(listen_to_redis, opts.host, opts.port, opts.password, ref(chatMessages), ref(chatMutex), username);
+	redisThread->detach();
 
 	// ikona od exe priprema png za  redball.rc  https://www.icoconverter.com/ + dodati redball.ico u cmakelist
 
@@ -222,7 +250,6 @@ int main()
 
     // START SCREEN
     bool gameStarted = false;
-    char username[64] = { 0 };
     bool usernameEditMode = true;  // odmah aktivan za tipkanje
 
     // CHAT
@@ -255,9 +282,9 @@ int main()
             if (gameTime >= GAME_DURATION)
             {
                 gameOver = true;
-                if (!scoreSubmitted && strlen(username) > 0)
+                if (!scoreSubmitted && strlen(username) > 0 && redis)
                 {
-                    update_leaderboard(redis, string(username), score);
+                    update_leaderboard(*redis, string(username), score);
                     scoreSubmitted = true;
                 }
             }
@@ -423,9 +450,6 @@ int main()
             int cx = screenWidth / 2;
             int cy = screenHeight / 2;
 
-            // refresh leaderboard list (top 3)
-            topPlayers = get_top_players(redis, 3);
-
             // Semi-transparent overlay
             int ow = 800, oh = 520;  // a little taller to fit leaderboard
             int ox = cx - ow / 2;
@@ -437,22 +461,6 @@ int main()
             const char* title = "RAY RED RAID";
             int titleSize = 68;
             DrawText(title, cx - MeasureText(title, titleSize) / 2, oy + 30, titleSize, RED);
-
-            // draw leaderboard under title
-            if (!topPlayers.empty())
-            {
-                const char* lbTitle = "Top Players:";
-                int lbSize = 24;
-                DrawText(lbTitle, cx - MeasureText(lbTitle, lbSize) / 2, oy + 110, lbSize, YELLOW);
-                for (size_t i = 0; i < topPlayers.size(); ++i)
-                {
-                    string line = TextFormat("%zu. %s - %d", i + 1,
-                                             topPlayers[i].first.c_str(),
-                                             topPlayers[i].second);
-                    DrawText(line.c_str(), cx - MeasureText(line.c_str(), 20) / 2,
-                             oy + 140 + (int)i * 28, 20, LIGHTGRAY);
-                }
-            }
 
             // Subtitle
             const char* sub = "Enter your username to start:";
@@ -468,7 +476,17 @@ int main()
 
             // START GAME button — centered
             if (GuiButton({ (float)(cx - 130), (float)(oy + 278), 260, 56 }, "START GAME"))
-                if (strlen(username) > 0) gameStarted = true;
+                if (strlen(username) > 0) {
+                    // Load leaderboard after Redis is initialized
+                    if (topPlayers.empty() && redis) {
+                        topPlayers = get_top_players(*redis, 10);
+                    }
+                    gameStarted = true;
+                    // Save username to file
+                    std::ofstream outfile("username.txt");
+                    outfile << username << std::endl;
+                    outfile.close();
+                }
 
             GuiSetStyle(DEFAULT, TEXT_SIZE, 10);
 
@@ -535,10 +553,62 @@ int main()
                 if (GuiTextBox({ (float)tbX, (float)(chatY + 10), (float)tbW, 42 }, chatMessage, 256, chatEditMode))
                     chatEditMode = !chatEditMode;
 
+                // Send on SEND button
+                bool sendMessage = false;
                 if (GuiButton({ (float)(screenWidth - 155), (float)(chatY + 10), 140, 42 }, "SEND"))
-                { /* TODO: send logic */ }
+                    sendMessage = true;
+                
+                // Send on Enter key if textbox is active
+                if (IsKeyPressed(KEY_ENTER) && strlen(chatMessage) > 0) {
+                    sendMessage = true;
+                    chatEditMode = false;
+                }
+
+                if (sendMessage) {
+                    if (strlen(chatMessage) > 0 && redis) {
+                        string fullMsg = string(username) + ": " + chatMessage;
+                        redis->publish("chat", fullMsg);
+                        cout << "[CHAT SENT] " << fullMsg << endl;
+                        chatMessage[0] = '\0';
+                    }
+                }
 
                 GuiSetStyle(DEFAULT, TEXT_SIZE, 10);
+            }
+        }
+
+        // Chat display in right third
+        if (gameStarted) {
+            int chatX = screenWidth * 2 / 3;
+            int chatW = screenWidth / 3;
+            int chatH_display = screenHeight - 62;
+            DrawRectangle(chatX, 0, chatW, chatH_display, Color{0, 0, 0, 150});
+            int y = 10;
+            
+            // Draw Top Players section
+            if (!topPlayers.empty()) {
+                DrawText("TOP PLAYERS", chatX + 10, y, 20, YELLOW);
+                y += 28;
+                for (size_t i = 0; i < topPlayers.size(); ++i) {
+                    string line = TextFormat("%zu. %s - %d", i + 1,
+                                             topPlayers[i].first.c_str(),
+                                             topPlayers[i].second);
+                    DrawText(line.c_str(), chatX + 10, y, 16, LIGHTGRAY);
+                    y += 20;
+                }
+            }
+            
+            // Draw chat messages below top players
+            DrawText("CHAT", chatX + 10, y, 20, LIME);
+            y += 28;
+            int maxLines = (chatH_display - y) / 20;
+            {
+                lock_guard<mutex> lock(chatMutex);
+                int start = max(0, (int)chatMessages.size() - maxLines);
+                for (size_t i = start; i < chatMessages.size(); ++i) {
+                    DrawText(chatMessages[i].c_str(), chatX + 10, y, 16, LIGHTGRAY);
+                    y += 20;
+                }
             }
         }
 
@@ -546,8 +616,8 @@ int main()
 
         EndDrawing();
 
-        // ── RESTART ON CLICK ───────────────────────────────────────
-        if (gameOver && gameStarted && (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || IsKeyPressed(KEY_ENTER)))
+        // ── RESTART ON F5 ─────────────────────────────────────────
+        if (gameOver && gameStarted && IsKeyPressed(KEY_F5))
         {
 
             //PlaySound(hornSound);
